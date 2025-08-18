@@ -1,0 +1,655 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>FrameCalc — v16.3 (Fotos + PDF)</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = { theme: { extend: { colors: { brand:'#0ea5e9', brand2:'#22c55e'} } } };
+</script>
+<style>
+  .mono{font-family: ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,'Liberation Mono',monospace}
+  .scrollchips::-webkit-scrollbar{height:8px}
+  .scrollchips::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:999px}
+  .card-sel.active{outline:2px solid #22c55e; outline-offset:2px}
+  .typecard svg{width:72px;height:72px}
+  .chip{ display:inline-flex; align-items:center; gap:8px; font-size:14px; border:1px solid #cbd5e1; border-radius:999px; padding:4px 12px; }
+  .photo-thumb{ width:100%; height:96px; object-fit:cover; border-radius:8px; border:1px solid #e2e8f0; }
+  @media print { .noprint{ display:none !important; } }
+</style>
+</head>
+<body class="bg-slate-50 text-slate-900">
+  <!-- App Bar -->
+  <header class="sticky top-0 z-30 bg-white/90 backdrop-blur border-b border-slate-200">
+    <div class="max-w-7xl mx-auto px-4 py-3 flex items-center gap-3">
+      <div class="w-8 h-8 rounded-lg bg-brand text-white grid place-items-center font-black">FC</div>
+      <div class="font-extrabold tracking-tight">FrameCalc</div>
+      <div class="text-xs text-slate-500">Innenanschlag · Fuge innen 15–20 mm</div>
+      <div class="grow"></div>
+      <button id="themeBtn" class="px-3 py-1.5 rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-100 noprint">Light/Dark</button>
+      <button id="pdfBtnTop" class="ml-2 px-3 py-1.5 rounded-lg bg-rose-600 text-white hover:bg-rose-700 noprint">📄 PDF</button>
+    </div>
+  </header>
+
+  <main id="exportRoot" class="max-w-7xl mx-auto px-4 py-6">
+    <!-- Projektkopf -->
+    <section class="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 md:p-6 mb-6">
+      <h2 class="text-xl font-semibold mb-4">Projektkopf</h2>
+
+      <div class="grid md:grid-cols-3 gap-4">
+        <div>
+          <label class="block text-sm text-slate-600 mb-1">Kommission</label>
+          <input id="k_kommission" class="w-full rounded-lg border border-slate-300 px-3 py-2" placeholder="z. B. Müller, Objekt XY">
+        </div>
+        <div class="md:col-span-2">
+          <label class="block text-sm text-slate-600 mb-1">Anschrift</label>
+          <input id="k_ans" class="w-full rounded-lg border border-slate-300 px-3 py-2" placeholder="Straße, PLZ Ort">
+        </div>
+        <div>
+          <label class="block text-sm text-slate-600 mb-1">Führungsschienen (Bestand) – Tiefe in mm</label>
+          <input id="k_fuehrung_tiefe" type="number" step="0.5" class="w-full rounded-lg border border-slate-300 px-3 py-2" placeholder="z. B. 45">
+        </div>
+        <div>
+          <label class="block text-sm text-slate-600 mb-1">RAE im Bestand?</label>
+          <select id="k_rae_bestand" class="w-full rounded-lg border border-slate-300 px-3 py-2">
+            <option value="ja">Ja</option>
+            <option value="nein">Nein</option>
+          </select>
+        </div>
+        <div id="k_rae_neu_wrap" class="hidden">
+          <label class="block text-sm text-slate-600 mb-1">Sollen neue RAE eingebaut werden?</label>
+          <select id="k_rae_neu" class="w-full rounded-lg border border-slate-300 px-3 py-2">
+            <option value="nein">Nein</option>
+            <option value="ja">Ja</option>
+          </select>
+          <p id="k_rae_warn" class="text-red-600 text-xs mt-1 hidden">⚠️ Durch neue RAEs sind neue Außenbleche/Steinbänke notwendig (Fenster rutscht weiter ins Haus).</p>
+        </div>
+      </div>
+
+      <hr class="my-6 border-slate-200">
+
+      <div class="grid md:grid-cols-2 gap-6">
+        <!-- Bestandsfenster -->
+        <div>
+          <div class="text-sm text-slate-600 mb-2">Bestandsfenster (Mehrfachauswahl)</div>
+          <div class="flex flex-wrap gap-2">
+            <label class="chip"><input type="checkbox" data-k="best" value="Holz IV68">Holz IV68</label>
+            <label class="chip"><input type="checkbox" data-k="best" value="Verbundfenster">Verbundfenster</label>
+            <label class="chip"><input type="checkbox" data-k="best" value="Einfachfenster">Einfachfenster</label>
+            <label class="chip"><input type="checkbox" data-k="best" value="Kastendoppelfenster Holz">Kastendoppelfenster Holz</label>
+            <label class="chip"><input type="checkbox" data-k="best" value="Kunststoff">Kunststoff</label>
+            <label class="chip"><input type="checkbox" data-k="best" value="Alu">Alu</label>
+            <label class="chip"><input type="checkbox" data-k="best" value="Alu-Kastenfenster">Alu‑Kastenfenster</label>
+            <label class="chip"><input type="checkbox" data-k="best" value="Andere">Andere
+              <input id="k_best_andere" class="ml-2 rounded border border-slate-300 px-2 py-1" placeholder="Text">
+            </label>
+          </div>
+        </div>
+
+        <!-- Gebäudeart -->
+        <div>
+          <div class="text-sm text-slate-600 mb-2">Gebäudeart (Mehrfachauswahl)</div>
+          <div class="flex flex-wrap gap-2">
+            <label class="chip"><input type="checkbox" data-k="bau" value="EFH">Einfamilienhaus</label>
+            <label class="chip"><input type="checkbox" data-k="bau" value="MFH">Mehrfamilienhaus</label>
+            <label class="chip"><input type="checkbox" id="bau_eig" data-k="bau" value="Eigentumswohnung">Eigentumswohnung
+              <input id="bau_eig_stock" class="ml-2 rounded border border-slate-300 px-2 py-1" placeholder="Stockwerk">
+            </label>
+            <label class="chip"><input type="checkbox" data-k="bau" value="DHH">Doppelhaushälfte</label>
+            <label class="chip"><input type="checkbox" data-k="bau" value="Reihenhaus">Reihenhaus</label>
+            <label class="chip"><input type="checkbox" data-k="bau" value="Reihenendhaus">Reihenendhaus</label>
+            <label class="chip"><input type="checkbox" data-k="bau" value="Industrie">Industriegebäude</label>
+            <label class="chip"><input type="checkbox" data-k="bau" value="Andere">Andere
+              <input id="k_bau_andere" class="ml-2 rounded border border-slate-300 px-2 py-1" placeholder="Text">
+            </label>
+          </div>
+        </div>
+
+        <!-- Zugang / Anlieferung -->
+        <div>
+          <div class="text-sm text-slate-600 mb-2">Zugang / Anlieferung</div>
+          <div class="flex flex-wrap gap-2">
+            <label class="chip"><input type="checkbox" data-k="log">LKW anliefern möglich</label>
+            <label class="chip"><input type="checkbox" data-k="log">Parkverbot beantragen</label>
+            <label class="chip"><input type="checkbox" data-k="log">Kran / Hebebühne</label>
+            <label class="chip"><input type="checkbox" data-k="log">Parkplatz vorhanden</label>
+            <label class="chip"><input type="checkbox" data-k="log">Lift erforderlich</label>
+          </div>
+        </div>
+
+        <!-- Fensterbänke -->
+        <div>
+          <div class="grid sm:grid-cols-2 gap-4">
+            <div>
+              <div class="text-sm text-slate-600 mb-2">Innenfensterbank (Bestand)</div>
+              <div class="flex flex-wrap gap-2">
+                <label class="chip"><input type="radio" name="ifb">Holz</label>
+                <label class="chip"><input type="radio" name="ifb">Kunststoff</label>
+                <label class="chip"><input type="radio" name="ifb">Asbest</label>
+                <label class="chip"><input type="radio" name="ifb">Stein/Marmor</label>
+              </div>
+            </div>
+            <div>
+              <div class="text-sm text-slate-600 mb-2">Außenfensterbank (Bestand)</div>
+              <div class="flex flex-wrap gap-2">
+                <label class="chip"><input type="radio" name="afb">Aluminium</label>
+                <label class="chip"><input type="radio" name="afb">Zink</label>
+                <label class="chip"><input type="radio" name="afb">Stein (Sohlbank)</label>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Mauerwerk -->
+        <div class="md:col-span-2">
+          <div class="text-sm text-slate-600 mb-2">Mauerwerksart</div>
+          <div class="flex flex-wrap gap-2">
+            <label class="chip"><input type="checkbox">Ytong / Porenbeton</label>
+            <label class="chip"><input type="checkbox">Mauerziegel / Vollziegel</label>
+            <label class="chip"><input type="checkbox">Kalksandstein</label>
+            <label class="chip"><input type="checkbox">Hohlblock / Hochlochziegel</label>
+            <label class="chip"><input type="checkbox">Bimssteine</label>
+            <label class="chip"><input type="checkbox">Zweischalig mit Luftschicht</label>
+            <label class="chip"><input type="checkbox">Holzständerbauweise</label>
+            <label class="chip"><input type="checkbox">Beton</label>
+            <label class="chip"><input type="checkbox">Andere
+              <input class="ml-2 rounded border border-slate-300 px-2 py-1" placeholder="Text">
+            </label>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Profil-Galerie -->
+    <section class="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 md:p-6 mb-6">
+      <div class="flex items-center justify-between mb-3">
+        <h2 class="text-xl font-semibold">Profil & Kasten auswählen</h2>
+        <div class="text-xs text-slate-500">Regelwerk wird automatisch angepasst</div>
+      </div>
+      <div class="scrollchips overflow-x-auto flex gap-3 py-2">
+        <!-- Profile 70 / 80 -->
+        <button class="card-sel shrink-0 border rounded-2xl p-3 hover:bg-slate-50" data-prof="70" data-addw="100" onclick="pickProfile(this)">
+          <div class="text-xs text-slate-500 mb-1">Profil</div>
+          <div class="flex items-center gap-3">
+            <svg viewBox="0 0 120 80" class="w-28 h-16">
+              <rect x="10" y="10" width="90" height="60" stroke="#334155" stroke-width="3" fill="none"/>
+              <rect x="15" y="15" width="80" height="50" stroke="#64748b" stroke-width="2" fill="none"/>
+              <rect x="10" y="10" width="10" height="60" fill="#334155"/>
+              <text x="25" y="73" font-size="9" fill="#334155">70 mm</text>
+            </svg>
+            <div>
+              <div class="font-semibold">PVC 70 mm</div>
+              <div class="text-xs text-slate-500">Außen +100 mm · Höhe +50 mm</div>
+            </div>
+          </div>
+        </button>
+        <button class="card-sel shrink-0 border rounded-2xl p-3 hover:bg-slate-50" data-prof="80" data-addw="120" onclick="pickProfile(this)">
+          <div class="text-xs text-slate-500 mb-1">Profil</div>
+          <div class="flex items-center gap-3">
+            <svg viewBox="0 0 120 80" class="w-28 h-16">
+              <rect x="10" y="10" width="90" height="60" stroke="#334155" stroke-width="3" fill="none"/>
+              <rect x="15" y="15" width="80" height="50" stroke="#64748b" stroke-width="2" fill="none"/>
+              <rect x="10" y="10" width="12" height="60" fill="#334155"/>
+              <text x="25" y="73" font-size="9" fill="#334155">80 mm</text>
+            </svg>
+            <div>
+              <div class="font-semibold">PVC 80 mm</div>
+              <div class="text-xs text-slate-500">Außen +120 mm · Höhe +60 mm</div>
+            </div>
+          </div>
+        </button>
+
+        <!-- RAE Kastenhöhen -->
+        <button class="card-sel shrink-0 border rounded-2xl p-3 hover:bg-slate-50" data-hk="185" onclick="pickHK(this)">
+          <div class="text-xs text-slate-500 mb-1">RAE</div>
+          <div class="flex items-center gap-3">
+            <svg viewBox="0 0 120 80" class="w-28 h-16">
+              <rect x="10" y="10" width="90" height="60" stroke="#334155" stroke-width="3" fill="none"/>
+              <rect x="10" y="10" width="90" height="18" fill="#64748b"/>
+              <text x="15" y="73" font-size="9" fill="#334155">HK 185</text>
+            </svg>
+            <div>
+              <div class="font-semibold">RAE Kasten 185 mm</div>
+              <div class="text-xs text-slate-500">bis FH 1400 mm</div>
+            </div>
+          </div>
+        </button>
+        <button class="card-sel shrink-0 border rounded-2xl p-3 hover:bg-slate-50" data-hk="210" onclick="pickHK(this)">
+          <div class="text-xs text-slate-500 mb-1">RAE</div>
+          <div class="flex items-center gap-3">
+            <svg viewBox="0 0 120 80" class="w-28 h-16">
+              <rect x="10" y="10" width="90" height="60" stroke="#334155" stroke-width="3" fill="none"/>
+              <rect x="10" y="10" width="90" height="22" fill="#64748b"/>
+              <text x="15" y="73" font-size="9" fill="#334155">HK 210</text>
+            </svg>
+            <div>
+              <div class="font-semibold">RAE Kasten 210 mm</div>
+              <div class="text-xs text-slate-500">ab FH 1400 mm</div>
+            </div>
+          </div>
+        </button>
+      </div>
+
+      <div class="mt-3 text-xs text-slate-500">
+        Ausgewählt: <span id="selProfile" class="font-semibold">PVC 70 mm</span> · <span id="selHK" class="font-semibold">HK auto (185/210)</span>
+      </div>
+    </section>
+
+    <!-- Projekt Setup -->
+    <section class="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 md:p-6 mb-6">
+      <div class="grid md:grid-cols-4 gap-4 items-end">
+        <div>
+          <label class="block text-sm text-slate-600 mb-1">Anzahl Fenster</label>
+          <select id="count" class="w-full rounded-lg border border-slate-300 px-3 py-2"></select>
+        </div>
+        <div class="flex gap-2 noprint">
+          <button class="px-4 py-2 rounded-lg border border-slate-300 hover:bg-slate-50" onclick="buildRows()">Neu aufbauen</button>
+          <button class="px-4 py-2 rounded-lg bg-brand text-white" onclick="prefill()">Demo füllen</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Fenster Eingaben -->
+    <section id="rows" class="grid lg:grid-cols-2 gap-4"></section>
+
+    <!-- Ergebnisse Tabelle -->
+    <section class="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 md:p-6 mt-6">
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="text-xl font-semibold">Gesamtübersicht</h2>
+        <div class="flex gap-2 noprint">
+          <button class="px-3 py-2 rounded-lg border border-slate-300 hover:bg-slate-50" onclick="calcAll()">Aktualisieren</button>
+          <button class="px-3 py-2 rounded-lg border border-slate-300 hover:bg-slate-50" onclick="applyMirror()">Einheitliches Spiegelmaß (ausgewählte)</button>
+        </div>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="min-w-full text-sm">
+          <thead class="text-left text-slate-500 border-b">
+            <tr>
+              <th class="py-2 pr-4">#</th>
+              <th class="py-2 pr-4">Raum</th>
+              <th class="py-2 pr-4">Typ</th>
+              <th class="py-2 pr-4">Rollladen</th>
+              <th class="py-2 pr-4">Bestellmaß (B×H)</th>
+              <th class="py-2 pr-4">Spiegel</th>
+              <th class="py-2 pr-4">Fugen L/R/O</th>
+              <th class="py-2 pr-4">RV L/R/O</th>
+              <th class="py-2 pr-4">Hinweise</th>
+            </tr>
+          </thead>
+          <tbody id="out" class="divide-y"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- PDF Button -->
+    <div class="max-w-7xl mx-auto mt-6 mb-12 noprint">
+      <button id="pdfBtn" class="px-4 py-2 rounded-lg bg-rose-600 text-white hover:bg-rose-700">📄 Als PDF exportieren</button>
+      <span class="text-xs text-slate-500 ml-2">Exportiert das komplette Projekt inkl. Fotos</span>
+    </div>
+  </main>
+
+  <!-- libs for PDF -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+
+<script>
+// ----- Theme toggle
+document.getElementById('themeBtn').addEventListener('click', ()=>{
+  document.documentElement.classList.toggle('dark');
+  document.body.classList.toggle('bg-slate-900');
+  document.body.classList.toggle('text-slate-100');
+});
+
+// quick PDF triggers
+document.getElementById('pdfBtn').addEventListener('click', exportPDF);
+document.getElementById('pdfBtnTop').addEventListener('click', exportPDF);
+
+// ----- RAE-neu Logik
+const raeSel = document.getElementById('k_rae_bestand');
+const raeWrap = document.getElementById('k_rae_neu_wrap');
+const raeNeu = document.getElementById('k_rae_neu');
+const raeWarn = document.getElementById('k_rae_warn');
+raeSel.addEventListener('change', ()=>{
+  const nein = raeSel.value==='nein';
+  raeWrap.classList.toggle('hidden', !nein);
+  raeWarn.classList.toggle('hidden', !(nein && raeNeu.value==='ja'));
+});
+raeNeu?.addEventListener('change', ()=>{
+  const nein = raeSel.value==='nein';
+  raeWarn.classList.toggle('hidden', !(nein && raeNeu.value==='ja'));
+});
+
+// ----- Profile selection
+let PROFILE_DEPTH = 70;  // sichtbarer Blendrahmen außen in mm (Profil)
+let ADD_W = 100;         // max + in Breite (2*X), standard 100 für 70er; 120 für 80er
+let HK_OVERRIDE = null;  // optional 185/210 vom Nutzer
+
+function pickProfile(btn){
+  document.querySelectorAll('[data-prof]').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  PROFILE_DEPTH = parseInt(btn.getAttribute('data-prof'),10);
+  ADD_W = parseInt(btn.getAttribute('data-addw'),10);
+  document.getElementById('selProfile').textContent = `PVC ${PROFILE_DEPTH} mm`;
+}
+function pickHK(btn){
+  document.querySelectorAll('[data-hk]').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  HK_OVERRIDE = parseInt(btn.getAttribute('data-hk'),10);
+  document.getElementById('selHK').textContent = `HK ${HK_OVERRIDE} mm (fest)`;
+}
+
+// Default active 70 mm
+window.addEventListener('DOMContentLoaded', ()=>{
+  const first = document.querySelector('[data-prof="70"]'); if(first){ first.classList.add('active'); }
+});
+
+// ----- Helpers
+const round05 = x => Math.round(x*2)/2;
+const toNum = v => (v===''||isNaN(+v)?0:+v);
+
+// RV Raster
+function chooseRv10(fuge){
+  fuge = round05(fuge);
+  if (fuge>=15 && fuge<=20) return 0;
+  if (fuge>20){
+    let rv = Math.ceil((fuge-20)/10)*10;
+    if (fuge - rv < 15) rv = Math.max(0, rv-10);
+    const after = fuge - rv;
+    if (after>=15 && after<=20) return rv;
+  }
+  return 0;
+}
+
+// ---- Types (schematisch, bis echte Zeichnungen eingebunden sind)
+const ST = '#64748b', SW = 2;
+const frame = () => `<rect x="8" y="8" width="64" height="64" fill="none" stroke="${ST}" stroke-width="${SW+1}"/>`;
+const sash = () => `<rect x="12" y="12" width="56" height="56" fill="none" stroke="${ST}" stroke-width="${SW}"/>`;
+const midV = () => `<rect x="39" y="12" width="2" height="56" fill="${ST}" />`;
+const midH = () => `<rect x="12" y="39" width="56" height="2" fill="${ST}" />`;
+const diagL = () => `<path d="M18,18 L62,62" stroke="${ST}" stroke-width="${SW}"/>`;
+const diagR = () => `<path d="M62,18 L18,62" stroke="${ST}" stroke-width="${SW}"/>`;
+const tilt  = () => `<path d="M18,22 L62,22 L18,62 Z" fill="none" stroke="${ST}" stroke-width="${SW}"/>`;
+
+const TYPES = [
+  {id:'ef_dk_l', label:'1‑flg. DK links', svg:`<svg viewBox="0 0 80 80">${frame()}${sash()}${diagL()}</svg>`},
+  {id:'ef_dk_r', label:'1‑flg. DK rechts', svg:`<svg viewBox="0 0 80 80">${frame()}${sash()}${diagR()}</svg>`},
+  {id:'ef_kipp',  label:'1‑flg. Kipp', svg:`<svg viewBox="0 0 80 80">${frame()}${sash()}${tilt()}</svg>`},
+  {id:'ef_fest',  label:'Festfeld', svg:`<svg viewBox="0 0 80 80">${frame()}${sash()}</svg>`},
+  {id:'2f_stulp', label:'2‑flg. Stulp', svg:`<svg viewBox="0 0 80 80">${frame()}${sash()}${diagL()}${diagR()}</svg>`},
+  {id:'2f_pfosten', label:'2‑flg. Pfosten', svg:`<svg viewBox="0 0 80 80">${frame()}${sash()}${midV()}${diagL()}${diagR()}</svg>`},
+  {id:'ol_ef',   label:'Oberlicht + 1‑flg.', svg:`<svg viewBox="0 0 80 80">${frame()}${sash()}${midH()}${diagL()}</svg>`},
+  {id:'ol_fest', label:'Oberlicht + Fest',   svg:`<svg viewBox="0 0 80 80">${frame()}${sash()}${midH()}</svg>`},
+];
+
+function typePickerHTML(i){
+  return `<div class="scrollchips overflow-x-auto flex gap-2 py-2">
+    ${TYPES.map(t=>`
+      <button class="typecard shrink-0 border rounded-xl p-2 hover:bg-slate-50" data-i="${i}" data-type="${t.id}" onclick="pickType(${i}, '${t.id}', this)">
+        ${t.svg}
+        <div class="text-[11px] mt-1 text-slate-700">${t.label}</div>
+      </button>
+    `).join('')}
+  </div><input id="ft_${i}" type="hidden">`;
+}
+function pickType(i, id, el){
+  document.getElementById(`ft_${i}`).value = id;
+  document.querySelectorAll(`.typecard[data-i="${i}"]`).forEach(x=>x.classList.remove('active'));
+  el.classList.add('active');
+}
+
+// --------- FOTO-Funktion ----------
+const photoStore = {}; // { i: [dataURL, ...] }
+
+function addPhoto(i){
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = 'image/*';
+  input.capture = 'environment';
+  input.multiple = true;
+  input.onchange = (e)=> handleFiles(i, e.target.files);
+  input.click();
+}
+
+function handleFiles(i, files){
+  if (!photoStore[i]) photoStore[i] = [];
+  const gallery = document.getElementById(`photos_${i}`);
+  [...files].forEach(file => {
+    const reader = new FileReader();
+    reader.onload = (ev)=>{
+      const url = ev.target.result;
+      photoStore[i].push(url);
+      const wrap = document.createElement('div');
+      wrap.className = 'relative';
+      wrap.innerHTML = `<img src="${url}" class="photo-thumb" alt="Foto Fenster ${i}">
+        <button class="absolute top-1 right-1 bg-white/80 hover:bg-white text-slate-700 text-xs px-2 py-0.5 rounded" title="Entfernen" onclick="removePhoto(${i}, this)">×</button>`;
+      gallery.appendChild(wrap);
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+function removePhoto(i, btn){
+  const wrap = btn.parentElement;
+  const img = wrap.querySelector('img');
+  const url = img.getAttribute('src');
+  wrap.remove();
+  if (photoStore[i]){
+    const idx = photoStore[i].indexOf(url);
+    if (idx>=0) photoStore[i].splice(idx,1);
+  }
+}
+
+// Fenster-Karte HTML (mit Foto-Button und Galerie)
+function windowCard(i){
+  return `<div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 md:p-6">
+    <div class="flex items-center justify-between mb-3">
+      <h3 class="text-lg font-semibold">Fenster ${i}</h3>
+      <label class="text-xs text-slate-500 flex items-center gap-2"><input id="sel_${i}" type="checkbox" checked> auswählen</label>
+    </div>
+    <div class="grid md:grid-cols-2 gap-4">
+      <div><label class="block text-sm text-slate-600 mb-1">Raum</label><input id="name_${i}" class="w-full rounded-lg border border-slate-300 px-3 py-2" placeholder="z. B. Küche"></div>
+      <div><label class="block text-sm text-slate-600 mb-1">Rollladen</label>
+        <select id="rl_${i}" class="w-full rounded-lg border border-slate-300 px-3 py-2">
+          <option value="none">Kein</option>
+          <option value="rae">Aufsatzkasten (RAE)</option>
+          <option value="vorbau">Vorbau (Laibung)</option>
+        </select>
+      </div>
+
+      <div class="md:col-span-2">
+        <label class="block text-sm text-slate-600 mb-1">Fenstertyp (technische Zeichnung)</label>
+        ${typePickerHTML(i)}
+      </div>
+
+      <div><label class="block text-sm text-slate-600 mb-1">Außen Breite</label><input id="aB_${i}" type="number" step="0.5" class="w-full rounded-lg border border-slate-300 px-3 py-2"></div>
+      <div><label class="block text-sm text-slate-600 mb-1">Außen Höhe</label><input id="aH_${i}" type="number" step="0.5" class="w-full rounded-lg border border-slate-300 px-3 py-2"></div>
+      <div><label class="block text-sm text-slate-600 mb-1">Innen Breite</label><input id="iB_${i}" type="number" step="0.5" class="w-full rounded-lg border border-slate-300 px-3 py-2"></div>
+      <div><label class="block text-sm text-slate-600 mb-1">Innen Höhe</label><input id="iH_${i}" type="number" step="0.5" class="w-full rounded-lg border border-slate-300 px-3 py-2"></div>
+      <div><label class="block text-sm text-slate-600 mb-1">Stich a→i (oben)</label><input id="sAI_${i}" type="number" step="0.5" class="w-full rounded-lg border border-slate-300 px-3 py-2"></div>
+      <div><label class="block text-sm text-slate-600 mb-1">Stich i→a (unten)</label><input id="sIA_${i}" type="number" step="0.5" class="w-full rounded-lg border border-slate-300 px-3 py-2"></div>
+      <div><label class="block text-sm text-slate-600 mb-1">Aufkantung (mm)</label><input id="aufk_${i}" type="number" step="0.5" value="0" class="w-full rounded-lg border border-slate-300 px-3 py-2"></div>
+      <div><label class="block text-sm text-slate-600 mb-1">Wandstärke innen (mm)</label><input id="wand_in_${i}" type="number" step="0.5" class="w-full rounded-lg border border-slate-300 px-3 py-2"></div>
+      <div><label class="block text-sm text-slate-600 mb-1">Wandstärke außen (mm)</label><input id="wand_out_${i}" type="number" step="0.5" class="w-full rounded-lg border border-slate-300 px-3 py-2"></div>
+    </div>
+
+    <!-- Foto-Bereich -->
+    <div class="mt-4">
+      <div class="flex items-center justify-between">
+        <div class="text-sm font-medium text-slate-700">Fotos zu dieser Position</div>
+        <button class="px-3 py-1.5 rounded-lg border border-slate-300 hover:bg-slate-50 text-sm noprint" onclick="addPhoto(${i})">📸 Foto hinzufügen</button>
+      </div>
+      <div id="photos_${i}" class="mt-2 grid grid-cols-3 gap-2"></div>
+    </div>
+
+    <div class="mt-4 flex gap-2 noprint">
+      <button class="px-3 py-2 rounded-lg bg-brand text-white" onclick="showResult(${i})">Berechnen</button>
+      <button class="px-3 py-2 rounded-lg border border-slate-300" onclick="clearResult(${i})">Leeren</button>
+    </div>
+    <div id="res_${i}" class="mt-4 text-sm bg-slate-50 border border-slate-200 rounded-xl p-3 hidden"></div>
+  </div>`;
+}
+
+// Baue Karten
+function buildRows(){
+  const n = parseInt(document.getElementById('count').value,10);
+  const wrap = document.getElementById('rows'); wrap.innerHTML='';
+  for(let i=1;i<=n;i++){ wrap.insertAdjacentHTML('beforeend', windowCard(i)); }
+}
+
+// Einzelberechnung (unverändert)
+function calcOne(i, forceX=null){
+  const rl = document.getElementById(`rl_${i}`).value;
+  const name = (document.getElementById(`name_${i}`).value || '').trim();
+  const aB = toNum(document.getElementById(`aB_${i}`).value);
+  const iB = toNum(document.getElementById(`iB_${i}`).value);
+  const aH = toNum(document.getElementById(`aH_${i}`).value);
+  const iH = toNum(document.getElementById(`iH_${i}`).value);
+  const sAI = toNum(document.getElementById(`sAI_${i}`).value);
+  const sIA = toNum(document.getElementById(`sIA_${i}`).value);
+  const AUF = toNum(document.getElementById(`aufk_${i}`).value);
+  const ftype = document.getElementById(`ft_${i}`).value || '—';
+  let r;
+  if (rl==='rae') r = calcRAE(aB,iB,aH,iH,sAI,sIA,AUF);
+  else if (rl==='vorbau') r = calcVorbau(aB,iB,aH,iH,sAI,sIA,AUF);
+  else r = calcInnenOhneRollladen(aB,iB,aH,iH,sAI,sIA,AUF,forceX);
+  const spiegel = Math.round((PROFILE_DEPTH - r.X)*2)/2;
+  return {...r, rl, name, spiegel, ftype};
+}
+
+// Show per window (zeigt Fotos mit an)
+function showResult(i){
+  const r = calcOne(i);
+  const el = document.getElementById(`res_${i}`);
+  const rlText = r.rl==='none'?'—':(r.rl==='rae'?'RAE':'Vorbau');
+  el.innerHTML = `
+    <div class="font-semibold">Bestellmaß Fenster: <span class="mono">${r.bestellB.toFixed(1)} × ${r.bestellH.toFixed(1)} mm</span></div>
+    <div class="mt-1">Spiegelmaß außen: <span class="mono">${r.spiegel.toFixed(1)} mm</span> (Profil ${PROFILE_DEPTH} mm)</div>
+    <div class="mt-1">Fenstertyp: ${r.ftype}</div>
+    <div class="mt-1">Fugen L/R/O: <span class="mono">${r.fugeL.toFixed(1)} / ${r.fugeR.toFixed(1)} / ${r.fugeO.toFixed(1)} mm</span></div>
+    <div class="mt-1">Rahmenverbreiterung L/R/O: <span class="mono">${r.rvL} / ${r.rvR} / ${r.rvO} mm</span></div>
+    <div class="mt-1">Rollladen: ${rlText} ${r.rl==='vorbau' ? `— Bestellmaß RL: <span class="mono">${r.rlOrder}</span>` : (r.rl==='rae'?`— HK ${r.HK} mm`:``)}</div>
+    ${(r.warns||[]).length?`<div class="mt-2 text-amber-600 text-xs">Hinweise: ${r.warns.join('; ')}</div>`:''}
+    ${(photoStore[i] && photoStore[i].length) ? `<div class="mt-3 grid grid-cols-3 gap-2">
+      ${photoStore[i].map(src=>`<img src="${src}" class="photo-thumb" alt="Foto Fenster ${i}">`).join('')}
+    </div>` : ''}
+  `;
+  el.classList.remove('hidden');
+}
+function clearResult(i){ const el=document.getElementById(`res_${i}`); el.classList.add('hidden'); el.innerHTML=''; }
+
+// Übersicht berechnen
+function calcAll(){
+  const n = parseInt(document.getElementById('count').value,10);
+  const out = document.getElementById('out'); out.innerHTML='';
+  for(let i=1;i<=n;i++){
+    const r = calcOne(i);
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td class="py-2 pr-4">${i}</td>
+      <td class="py-2 pr-4">${r.name || '—'}</td>
+      <td class="py-2 pr-4">${r.ftype}</td>
+      <td class="py-2 pr-4">${r.rl==='none'?'—':(r.rl==='rae'?'RAE':'Vorbau')}</td>
+      <td class="py-2 pr-4 mono">${r.bestellB.toFixed(1)} × ${r.bestellH.toFixed(1)}</td>
+      <td class="py-2 pr-4 mono">${r.spiegel.toFixed(1)} mm</td>
+      <td class="py-2 pr-4 mono">${r.fugeL.toFixed(1)} / ${r.fugeR.toFixed(1)} / ${r.fugeO.toFixed(1)}</td>
+      <td class="py-2 pr-4 mono">${r.rvL} / ${r.rvR} / ${r.rvO}</td>
+      <td class="py-2 pr-4 text-xs">${(r.warns||[]).join('; ')}</td>`;
+    out.appendChild(tr);
+  }
+}
+
+// Mirror (einheitliches Spiegelmaß)
+function applyMirror(){
+  const n = parseInt(document.getElementById('count').value,10);
+  let targetSpiegel = 0; let selected=[];
+  for(let i=1;i<=n;i++){
+    const sel = document.getElementById(`sel_${i}`)?.checked;
+    if (sel){
+      const r = calcOne(i);
+      if (r.rl!=='vorbau'){ selected.push(i); if (r.spiegel>targetSpiegel) targetSpiegel=r.spiegel; }
+    }
+  }
+  if (!selected.length) return;
+  const X_target = Math.round((PROFILE_DEPTH - targetSpiegel)*2)/2;
+  const out = document.getElementById('out'); out.innerHTML='';
+  for(const i of selected){
+    const r = calcOne(i, X_target);
+    if (r.fugeO < 15) (r.warns||[]).push('Einheitliches Spiegelmaß limitiert – oben <15 mm');
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td class="py-2 pr-4">${i}</td>
+      <td class="py-2 pr-4">${r.name || '—'}</td>
+      <td class="py-2 pr-4">${r.ftype}</td>
+      <td class="py-2 pr-4">${r.rl==='none'?'—':(r.rl==='rae'?'RAE':'Vorbau')}</td>
+      <td class="py-2 pr-4 mono">${r.bestellB.toFixed(1)} × ${r.bestellH.toFixed(1)}</td>
+      <td class="py-2 pr-4 mono">${r.spiegel.toFixed(1)} mm</td>
+      <td class="py-2 pr-4 mono">${r.fugeL.toFixed(1)} / ${r.fugeR.toFixed(1)} / ${r.fugeO.toFixed(1)}</td>
+      <td class="py-2 pr-4 mono">${r.rvL} / ${r.rvR} / ${r.rvO}</td>
+      <td class="py-2 pr-4 text-xs">${(r.warns||[]).join('; ')}</td>`;
+    out.appendChild(tr);
+  }
+}
+
+// Prefill Demo
+function prefill(){
+  document.getElementById('count').value='2';
+  buildRows();
+  // Fenster 1
+  document.getElementById('name_1').value='Test 1';
+  document.getElementById('aB_1').value='1000'; document.getElementById('iB_1').value='1200';
+  document.getElementById('aH_1').value='1000'; document.getElementById('iH_1').value='1200';
+  document.getElementById('sAI_1').value='1130'; document.getElementById('sIA_1').value='1070'; document.getElementById('aufk_1').value='30';
+  // Fenster 2
+  document.getElementById('name_2').value='Vorbau-Beispiel';
+  document.getElementById('rl_2').value='vorbau';
+  document.getElementById('aB_2').value='2400'; document.getElementById('iB_2').value='2400';
+  document.getElementById('aH_2').value='1200'; document.getElementById('iH_2').value='1200';
+  document.getElementById('sAI_2').value='1200'; document.getElementById('sIA_2').value='1200'; document.getElementById('aufk_2').value='0';
+}
+
+// Init
+(function(){
+  const sel = document.getElementById('count');
+  for(let i=1;i<=21;i++){ const o=document.createElement('option'); o.value=String(i); o.textContent=String(i); if(i===2)o.selected=true; sel.appendChild(o); }
+  const first = document.querySelector('[data-prof="70"]'); if(first){ first.classList.add('active'); }
+  buildRows();
+})();
+
+// -------- PDF Export (jsPDF + html2canvas) — inkludiert Fotos ----------
+async function exportPDF(){
+  // Vor Export: alle Fenster berechnen & Ergebnisboxen mit Fotos anzeigen
+  const n = parseInt(document.getElementById('count').value,10);
+  for(let i=1;i<=n;i++){ try{ showResult(i); }catch(e){} }
+
+  const root = document.getElementById('exportRoot');
+  const { jsPDF } = window.jspdf;
+
+  const canvas = await html2canvas(root, { scale: 2, backgroundColor: '#ffffff', useCORS: true });
+  const imgData = canvas.toDataURL('image/png');
+
+  const pdf = new jsPDF('p','mm','a4');
+  const pageW = pdf.internal.pageSize.getWidth();
+  const pageH = pdf.internal.pageSize.getHeight();
+
+  const imgW = pageW;
+  const imgH = canvas.height * pageW / canvas.width;
+
+  let position = 0;
+  pdf.addImage(imgData, 'PNG', 0, position, imgW, imgH);
+
+  if (imgH > pageH){
+    let heightLeft = imgH - pageH;
+    position = -pageH;
+    while (heightLeft > 0){
+      pdf.addPage();
+      position += pageH;
+      pdf.addImage(imgData, 'PNG', 0, position, imgW, imgH);
+      heightLeft -= pageH;
+    }
+  }
+
+  const kom = (document.getElementById('k_kommission').value || 'FrameCalc-Projekt').replace(/[^a-z0-9_\- ]/gi,'_');
+  pdf.save(kom + '.pdf');
+}
+</script>
+</body>
+</html>
