@@ -651,5 +651,204 @@ async function exportPDF(){
   pdf.save(kom + '.pdf');
 }
 </script>
+<script>
+// ------ Helper ------
+const round05 = x => Math.round(x*2)/2;
+const toNum = v => (v===''||isNaN(+v)?0:+v);
+
+// Profil / Regeln (werden ggf. von deinen Buttons gesetzt)
+window.PROFILE_DEPTH = window.PROFILE_DEPTH || 70;        // 70 oder 80
+window.ADD_W = (PROFILE_DEPTH===80) ? 120 : 100;          // +120 bei 80er, sonst +100
+let HK_OVERRIDE = null; // null => auto 185/210
+
+function chooseRv10(fuge){
+  fuge = round05(fuge);
+  if (fuge>=15 && fuge<=20) return 0;
+  if (fuge>20){
+    let rv = Math.ceil((fuge-20)/10)*10;
+    if (fuge - rv < 15) rv = Math.max(0, rv-10);
+    const after = fuge - rv;
+    if (after>=15 && after<=20) return rv;
+  }
+  return 0;
+}
+
+// ------ Kernlogik ------
+function calcInnenOhneRollladen(aB,iB,aH,iH,sAI,sIA,AUF){
+  const basisH = aH - AUF;
+  const maxB = iB - 30;                      // 15/15 innen
+  const maxH = iH ? (iH - 30) : Infinity;
+
+  let bestellB = Math.min(aB + ADD_W, maxB);
+  let X = round05((bestellB - aB)/2);        // Sicht außen je Seite
+  const addH = round05(ADD_W/2);
+  let bestellH = round05(basisH + Math.min(X, addH));
+
+  if (bestellH > maxH) bestellH = round05(maxH);
+
+  // oben prüfen gegen Stich a→i (abzgl Aufkantung)
+  let fugeO=0, rvO=0, warns=[];
+  if (sAI){
+    const sTopAdj = sAI - AUF;
+    fugeO = round05(sTopAdj - bestellH);
+    if (fugeO > 20){ rvO = chooseRv10(fugeO); fugeO = round05(fugeO - rvO); }
+    else if (fugeO < 15){
+      const need = 15 - fugeO;
+      const cand = round05(bestellH - need);
+      if (cand <= maxH){ bestellH = cand; fugeO = 15; }
+      else { warns.push('Oben <15 mm (Innenmaß begrenzt)'); }
+    }
+  }
+  // links/rechts symmetrisch
+  const sym = (iB - bestellB)/2;
+  let fugeL = round05(sym), fugeR = round05(sym);
+  let rvL = chooseRv10(fugeL), rvR = chooseRv10(fugeR);
+  fugeL = round05(fugeL - rvL); fugeR = round05(fugeR - rvR);
+
+  return {bestellB:round05(bestellB), bestellH:round05(bestellH), fugeL,fugeR,fugeO, rvL,rvR,rvO, warns};
+}
+
+function calcRAE(aB,iB,aH,iH,sAI,sIA,AUF){
+  const base = calcInnenOhneRollladen(aB,iB,aH,iH,sAI,sIA,AUF);
+  const basisH = aH - AUF;
+  let HK = HK_OVERRIDE || ((aH <= 1400)?185:210);
+  const sTopAdj = sAI ? (sAI - AUF) : null;
+
+  let bestellH, fugeO=0, warns=[...base.warns];
+  if (sTopAdj && (sTopAdj - basisH) > 240){
+    // „immer 20 mm Kasten sichtbar“ möglich
+    bestellH = round05(basisH - 20);
+    fugeO = round05(sTopAdj - (bestellH + HK));
+  } else {
+    // sonst 15–20 Regel, abhängig von diff
+    const diffTop = sTopAdj ? (sTopAdj - basisH) : 0;
+    const target = (diffTop >= 200) ? 20 : 15;
+    const total = (sTopAdj ?? (basisH + target)) - target;
+    bestellH = round05(total - HK);
+    fugeO = target;
+  }
+  if (iH && (bestellH + HK) > (iH - 15)){
+    const maxGes = iH - 15;
+    bestellH = round05(maxGes - HK);
+    warns.push('Gesamthöhe an Innenmaß (15 mm oben) begrenzt');
+  }
+  return {bestellB: base.bestellB, bestellH: round05(bestellH),
+          fugeL: base.fugeL, fugeR: base.fugeR, fugeO,
+          rvL: base.rvL, rvR: base.rvR, rvO: 0, HK, warns};
+}
+
+function calcVorbau(aB,iB,aH,iH,sAI,sIA,AUF){
+  // Fenster ins lichte Innenmaß (15/15), RL separat: Außenmaß −15/−15 inkl. Kasten
+  let bestellB = round05(Math.min(aB, iB - 30));
+  let bestellH = round05(Math.min(aH - AUF, iH - 30));
+  let fugeL = round05((iB - bestellB)/2);
+  let fugeR = round05((iB - bestellB)/2);
+  let rvL = chooseRv10(fugeL), rvR = chooseRv10(fugeR);
+  fugeL = round05(fugeL - rvL); fugeR = round05(fugeR - rvR);
+  let fugeO = round05(iH - bestellH);
+  let rvO = chooseRv10(fugeO);
+  fugeO = round05(fugeO - rvO);
+
+  const rlB = round05(aB - 15);
+  const rlH = round05(aH - 15);
+  return {bestellB, bestellH, fugeL,fugeR,fugeO, rvL,rvR,rvO, rlOrder:`${rlB.toFixed(1)} × ${rlH.toFixed(1)} mm (inkl. Kasten)`, warns:[]};
+}
+
+// ------ Daten je Karte lesen ------
+function readInputs(i){
+  const v = id => document.getElementById(`${id}_${i}`);
+  return {
+    rl: (v('rl')?.value || 'none'),
+    name: (v('name')?.value || '').trim(),
+    aB: +((v('aB')?.value)||0),
+    aH: +((v('aH')?.value)||0),
+    iB: +((v('iB')?.value)||0),
+    iH: +((v('iH')?.value)||0),
+    sAI: +((v('sAI')?.value)||0),
+    sIA: +((v('sIA')?.value)||0),
+    AUF: +((v('aufk')?.value)||0),
+    ftype: (document.getElementById(`ft_${i}`)?.value || '—')
+  };
+}
+
+function calcOne(i){
+  const d = readInputs(i);
+  let r;
+  if (d.rl==='rae') r = calcRAE(d.aB,d.iB,d.aH,d.iH,d.sAI,d.sIA,d.AUF);
+  else if (d.rl==='vorbau') r = calcVorbau(d.aB,d.iB,d.aH,d.iH,d.sAI,d.sIA,d.AUF);
+  else r = calcInnenOhneRollladen(d.aB,d.iB,d.aH,d.iH,d.sAI,d.sIA,d.AUF);
+  return {...r, rl:d.rl, name:d.name, ftype:d.ftype};
+}
+
+function showResult(i){
+  const r = calcOne(i);
+  const el = document.getElementById(`res_${i}`);
+  if (!el) return;
+
+  const rlText = r.rl==='none'?'—':(r.rl==='rae'?'RAE':'Vorbau');
+  el.innerHTML = `
+    <div class="font-semibold">Bestellmaß Fenster: <span style="font-family:monospace">${r.bestellB.toFixed(1)} × ${r.bestellH.toFixed(1)} mm</span></div>
+    <div class="mt-1">Fenstertyp: ${r.ftype}</div>
+    <div class="mt-1">Rollladen: ${rlText} ${r.rl==='vorbau' ? `— RL: <span style="font-family:monospace">${r.rlOrder||''}</span>` : (r.rl==='rae'?`— HK ${r.HK} mm`:``)}</div>
+    <div class="mt-1">Fugen L/R/O: <span style="font-family:monospace">${r.fugeL.toFixed(1)} / ${r.fugeR.toFixed(1)} / ${r.fugeO.toFixed(1)} mm</span></div>
+    <div class="mt-1">RV L/R/O: <span style="font-family:monospace">${r.rvL} / ${r.rvR} / ${r.rvO} mm</span></div>
+    ${(r.warns||[]).length?`<div class="mt-2" style="color:#b45309;font-size:12px">Hinweise: ${r.warns.join('; ')}</div>`:''}
+  `;
+  el.classList.remove('hidden');
+}
+
+function calcAll(){
+  const n = parseInt(document.getElementById('count')?.value || '0',10);
+  const out = document.getElementById('out'); if (out) out.innerHTML='';
+  for(let i=1;i<=n;i++){
+    const r = calcOne(i);
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td class="py-2 pr-4">${i}</td>
+      <td class="py-2 pr-4">${r.name || '—'}</td>
+      <td class="py-2 pr-4">${r.ftype}</td>
+      <td class="py-2 pr-4">${r.rl==='none'?'—':(r.rl==='rae'?'RAE':'Vorbau')}</td>
+      <td class="py-2 pr-4" style="font-family:monospace">${r.bestellB.toFixed(1)} × ${r.bestellH.toFixed(1)}</td>
+      <td class="py-2 pr-4" style="font-family:monospace">${r.fugeL.toFixed(1)} / ${r.fugeR.toFixed(1)} / ${r.fugeO.toFixed(1)}</td>
+      <td class="py-2 pr-4" style="font-family:monospace">${r.rvL} / ${r.rvR} / ${r.rvO}</td>
+      <td class="py-2 pr-4" style="font-size:12px">${(r.warns||[]).join('; ')}</td>`;
+    if (out) out.appendChild(tr);
+    showResult(i);
+  }
+}
+
+// Buttons sicher verdrahten (auch nach dynamischem Aufbau)
+function wireCalcButtons(){
+  document.querySelectorAll('[data-action="calc-one"]').forEach(btn=>{
+    btn.onclick = ()=> showResult(parseInt(btn.getAttribute('data-i'),10));
+  });
+  const all = document.getElementById('calcAllBtn');
+  if (all) all.onclick = calcAll;
+}
+
+// Falls deine App „Neu aufbauen“/„Anzahl Fenster“ nutzt:
+const rows = document.getElementById('rows');
+if (rows){
+  const observer = new MutationObserver(()=> wireCalcButtons());
+  observer.observe(rows, {childList:true, subtree:true});
+}
+wireCalcButtons();
+
+// Falls Profil-Buttons existieren (70/80):
+document.querySelectorAll('[data-prof]').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    window.PROFILE_DEPTH = parseInt(btn.getAttribute('data-prof'),10) || 70;
+    window.ADD_W = parseInt(btn.getAttribute('data-addw'),10) || (PROFILE_DEPTH===80?120:100);
+    calcAll();
+  });
+});
+
+// Falls HK-Buttons existieren (185/210):
+document.querySelectorAll('[data-hk]').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    HK_OVERRIDE = parseInt(btn.getAttribute('data-hk'),10) || null;
+    calcAll();
+  });
+});
+</script>
 </body>
 </html>
